@@ -25,6 +25,7 @@ The lab shows three things:
 - [Evidence 1: deployment, Service name, both replicas](#evidence-1-deployment-service-name-both-replicas)
 - [Evidence 2: readiness failure and recovery](#evidence-2-readiness-failure-and-recovery)
 - [Evidence 3: Pod deletion and replacement](#evidence-3-pod-deletion-and-replacement)
+- [Screenshots](#screenshots)
 - [Observations](#observations)
 - [Reflection](#reflection)
 - [Cleanup](#cleanup)
@@ -52,6 +53,7 @@ The lab shows three things:
 | 3 | **Service name remains unchanged** | [3.4](#34-the-service-is-unchanged) | same name, ClusterIP, UID |
 | 3 | Client **continues communicating** through the Service | [3.5](#35-the-client-kept-working-the-whole-time) | 0 failed requests during the replacement |
 | README | Deploy instructions, architecture diagram, evidence, reflection | this file + [`evidence/`](evidence/) | ✔ |
+| README | Screenshots, logs, or terminal output | [Screenshots](#screenshots) (7 PNGs) + terminal output and Pod logs in every Evidence section | ✔ |
 
 ---
 
@@ -120,13 +122,15 @@ flowchart TB
 ├── scripts/
 │   ├── deploy.sh                 build images + deploy + wait for rollout
 │   ├── demo.sh                   runs every test and writes evidence/*.txt
-│   └── cleanup.sh                deletes the namespace
-└── evidence/                     unedited terminal output from scripts/demo.sh
-    ├── 01-deploy.txt
-    ├── 02-service-discovery.txt
-    ├── 03-readiness-failure.txt
-    ├── 04-readiness-recovery.txt
-    └── 05-pod-deletion.txt
+│   ├── cleanup.sh                deletes the namespace
+│   └── screenshots/              capture.ps1 + scene.ps1: run each step in a PowerShell window and save it as PNG
+├── evidence/                     unedited terminal output from scripts/demo.sh
+│   ├── 01-deploy.txt
+│   ├── 02-service-discovery.txt
+│   ├── 03-readiness-failure.txt
+│   ├── 04-readiness-recovery.txt
+│   └── 05-pod-deletion.txt
+└── screenshots/                  PowerShell window screenshots of a live run (see "Screenshots")
 ```
 
 ---
@@ -285,7 +289,7 @@ kubectl -n inventory-lab logs deploy/inventory-client --since=1m     # no FAILED
 
 ## Evidence
 
-Everything below is real terminal output from **one run of [`scripts/demo.sh`](scripts/demo.sh)** on **2026-10-31, 21:25–21:26 UTC**, against the `docker-desktop` context. The complete, unedited output of every step is in [`evidence/`](evidence/). Where a block below is shortened, it says `…` and points to the file.
+Everything below is real terminal output from **one run of [`scripts/demo.sh`](scripts/demo.sh)** on **2026-10-31, 21:25–21:26 UTC**, against the `docker-desktop` context. The complete, unedited output of every step is in [`evidence/`](evidence/). Where a block below is shortened, it says `…` and points to the file. Screenshots of a second, live run of the same three tests are in [Screenshots](#screenshots).
 
 Pods in this run:
 
@@ -855,6 +859,69 @@ $ kubectl -n inventory-lab logs inventory-789977668-8f5ck
 2026-10-31T21:26:28.862Z  [inventory-789977668-8f5ck] served GET /inventory/SKU-1001 -> 200 qty=42 (request #2)
 …  (requests #3 to #19, see evidence/05-pod-deletion.txt)
 ```
+
+---
+
+## Screenshots
+
+These screenshots are from a **second, live run** of the same three tests on the same cluster, at **21:45–21:46 UTC**, about 20 minutes after the scripted run above. Each one is a real Windows PowerShell console window running the `kubectl` commands shown, saved as a PNG. They were produced by [`scripts/screenshots/capture.ps1`](scripts/screenshots/capture.ps1), which prints each command after the prompt, runs it, and then saves the window.
+
+Because Pods are replaced over time, the Pod names here differ from the text evidence:
+
+| Role in the screenshots | Pod |
+|---|---|
+| **Pod A**: fails readiness, recovers, then is deleted | `inventory-789977668-8f5ck` (10.1.0.13). It was itself the replacement Pod from the scripted run |
+| **Pod B** | `inventory-789977668-npr9b` (10.1.0.10) |
+| **Replacement** for Pod A | `inventory-789977668-bj6lv` (10.1.0.14) |
+
+The **Service** is still the same object as in the text evidence: `inventory-service`, ClusterIP `10.100.66.21`, UID `725db974-27eb-4624-b9d8-f0e38d93ff09`. It stayed the same through two Pod replacements.
+
+### Screenshot 1: both Pods running, the client uses the Service name, requests reach both replicas
+
+Both Inventory Pods are `1/1 Running`, and the Service lists both Pod IPs as endpoints. The client resolves `inventory-service` to the ClusterIP. 12 requests through the Service were answered by **both** Pods (7 / 5).
+
+![Both Pods running and both receiving requests through inventory-service](screenshots/01-both-replicas.png)
+
+### Screenshot 2: readiness failure, and the Pod is still running
+
+After `touch /tmp/not-ready`, Pod A shows **`0/1` but `Running` with `RESTARTS 0`**. Its `/ready` returns 503 (the kubelet logs `Readiness probe failed ... 503`) while `/healthz` still returns 200. The Service's endpoints shrink to **only Pod B** (`10.1.0.10:8080`).
+
+![Pod A fails readiness: 0/1, still Running, removed from the Service endpoints](screenshots/02-readiness-failure.png)
+
+### Screenshot 3: the unready Pod receives no traffic, the ready Pod keeps serving
+
+Pod A's request counter is **604 before and 604 after** 12 requests through the Service. Every request, and the client's own 1-per-second loop, was served by Pod B, with 0 failures.
+
+![The unready Pod's counter does not change; all requests go to Pod B](screenshots/03-unready-pod-gets-no-traffic.png)
+
+### Screenshot 4: readiness restored, and the Pod receives traffic again
+
+After `rm /tmp/not-ready`, the **same Pod** (same name, `RESTARTS 0`) is `1/1` again. Both IPs are back in the Service endpoints, and requests reach both Pods again (8 / 4). Pod A's counter moves from 604 to 613.
+
+![Pod A is ready again and receives traffic](screenshots/04-readiness-recovery.png)
+
+### Screenshot 5: Pod deleted, replacement created with a new name, Service unchanged
+
+Before: Pod A `8f5ck` at `10.1.0.13`. After `kubectl delete pod`: a new Pod **`bj6lv`** at **`10.1.0.14`**, created at 21:46:32Z. The Service has the **same name, ClusterIP and UID** before and after. The ReplicaSet's newest `SuccessfulCreate` event is the replacement Pod.
+
+![Pod deleted and replaced with a new name; the Service is unchanged](screenshots/05-pod-deletion-and-replacement.png)
+
+### Screenshot 5b: live `kubectl get pods --watch` during that deletion
+
+Started in a second window before the delete. Pod A goes `Terminating` → `Completed` → `DELETED`. At the same moment the replacement is `ADDED` and goes `Pending` → `ContainerCreating` → `Running 0/1` (5 s warm-up, not ready yet) → `Running 1/1`.
+
+![kubectl get pods --watch showing the old Pod terminating and the replacement starting](screenshots/05b-pod-watch-during-deletion.png)
+
+### Screenshot 6: the client kept communicating through the Service
+
+The client's log from the moment of the delete:
+- every request returned `200`;
+- Pod B answered alone while Pod A was terminating and the replacement was warming up;
+- the new Pod `bj6lv` joined from 21:46:41.
+
+The count of `FAILED` lines is **0**. The client Pod was never restarted (`RESTARTS 0`, age 21m), and the Service name still resolves to the same ClusterIP.
+
+![Client log shows no failures during the replacement; same Service name and ClusterIP](screenshots/06-client-kept-working.png)
 
 ---
 

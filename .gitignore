@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 .vscode/
 .idea/
+# temporary files written while capturing screenshots
+scripts/screenshots/marker-*.txt
+scripts/screenshots/state.txt
