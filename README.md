@@ -940,12 +940,4 @@ The count of `FAILED` lines is **0**. The client Pod was never restarted (`RESTA
 
 Pods are disposable: when one fails or is deleted, Kubernetes replaces it with a new Pod that has a different name, UID and IP address, just as `inventory-789977668-np99f` (`10.1.0.11`) was replaced by `inventory-789977668-8f5ck` (`10.1.0.13`) in this lab. A client that called Pod names or IPs directly would have broken at that moment, but a stable Service name gives clients one address that never changes. Throughout the lab, `inventory-service` always resolved to the same ClusterIP (`10.100.66.21`), so the client was never reconfigured or restarted and had zero failed requests. Behind that fixed name, Kubernetes keeps the endpoint list current by itself, adding Pods only after they pass readiness and removing Pods that are unready or terminating, so traffic only reaches replicas that can actually serve it. Separating "where to call" from "which Pods currently exist" is what lets services be scaled, updated and recovered without their callers noticing.
 
----
 
-## Cleanup
-
-```bash
-kubectl delete namespace inventory-lab      # or: bash scripts/cleanup.sh
-```
-
-To turn Kubernetes off again: Docker Desktop → Settings → Kubernetes → uncheck *Enable Kubernetes* → Apply.
