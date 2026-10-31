@@ -73,9 +73,9 @@ flowchart TB
         kubelet["kubelet<br/>runs the probes, reports Ready / NotReady"]
     end
 
-    client -- "1. look up the Service name" --> dns
-    client -- "2. HTTP to the ClusterIP" --> svc
-    svc -- "3. kube-proxy picks one Ready endpoint per connection" --> eps
+    client -- "Step 1: look up the Service name" --> dns
+    client -- "Step 2: HTTP to the ClusterIP" --> svc
+    svc -- "Step 3: kube-proxy picks one Ready endpoint per connection" --> eps
     eps --> podA
     eps --> podB
     kubelet -. "probe every 2 s" .-> podA
