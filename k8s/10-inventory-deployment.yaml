@@ -1,0 +1,79 @@
+# Inventory Service: 2 identical replicas managed by a Deployment.
+# The Deployment's ReplicaSet keeps 2 Pods running and replaces any Pod that is deleted.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: inventory-lab
+  labels:
+    app: inventory
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory          # the Service selects Pods by this label
+    spec:
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: inventory
+          image: inventory-service:1.0
+          imagePullPolicy: IfNotPresent   # built locally with `docker build`
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Downward API: each Pod learns its own name/IP so responses say who served them.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: WARMUP_SECONDS
+              value: "5"
+            - name: NOT_READY_FLAG
+              value: /tmp/not-ready
+          # Readiness: is this Pod allowed to receive Service traffic right now?
+          # 503 from /ready -> the Pod is marked NotReady and removed from the
+          # Service's endpoints, but the container keeps running.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 1
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 2
+          # Liveness: is the process alive? /healthz ignores readiness, so an
+          # unready Pod is NOT restarted.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          lifecycle:
+            # On delete, keep serving for a few seconds while the Pod is removed
+            # from the Service endpoints, so in-flight client requests don't fail.
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

@@ -1,0 +1,36 @@
+# One client that calls the Inventory Service by its Service name only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-client
+  namespace: inventory-lab
+  labels:
+    app: inventory-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-client
+  template:
+    metadata:
+      labels:
+        app: inventory-client
+    spec:
+      containers:
+        - name: client
+          image: inventory-client:1.0
+          imagePullPolicy: IfNotPresent   # built locally with `docker build`
+          args: ["loop"]
+          env:
+            - name: INVENTORY_URL
+              value: http://inventory-service   # Service name, never a Pod name or IP
+            - name: REQUEST_INTERVAL_SECONDS
+              value: "1"
+            - name: REQUEST_TIMEOUT_SECONDS
+              value: "2"
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi

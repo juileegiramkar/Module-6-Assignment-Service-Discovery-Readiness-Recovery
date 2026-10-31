@@ -1,0 +1,19 @@
+# Stable name + virtual IP in front of whichever Inventory Pods are Ready.
+# Inside the cluster it is reachable as:
+#   http://inventory-service                              (same namespace)
+#   http://inventory-service.inventory-lab.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: inventory-lab
+  labels:
+    app: inventory
+spec:
+  type: ClusterIP
+  selector:
+    app: inventory
+  ports:
+    - name: http
+      port: 80            # clients call port 80 on the Service
+      targetPort: http    # forwarded to containerPort 8080 on a Ready Pod
